@@ -1,0 +1,98 @@
+{
+    "Regions": [
+      {
+        "Name": "EquipOn",
+        "order": 1,
+        "category": "normal",
+        "boundary": [
+          {"x": 2, "y": 0},
+          {"x": 5, "y": 0},
+          {"x": 5, "y": 9},
+          {"x": 0, "y": 9},
+          {"x": 0, "y": 5},
+          {"x": 2, "y": 5}
+        ],
+        "StartPoint": {
+          "position": {"x": 3.5, "y": 1.5},
+          "angle": 0
+        },
+        "TargetArea": {
+          "position": {"x": 2, "y": 7},
+          "size": {"x": 2, "y": 2}
+        },
+        "has_vehicle": false
+      },
+      {
+        "Name": "ToBoat",
+        "order": 2,
+        "category": "free_walk",
+        "boundary": [
+          {"x": 0, "y": 0},
+          {"x": 14, "y": 0},
+          {"x": 14, "y": 5},
+          {"x": 0, "y": 5}
+        ],
+        "StartPoint": {
+          "position": {"x": 2, "y": 2},
+          "angle": 0
+        },
+        "TargetArea": {
+          "position": {"x": 12, "y": 2.5},
+          "size": {"x": 2, "y": 2}
+        },
+        "has_vehicle": true,
+        "vehicle": {
+          "relative_position": {"x": 12, "y": 2.5},
+          "angle": 0
+        }
+      },
+      {
+        "Name": "OffBoat",
+        "order": 3,
+        "category": "free_walk",
+        "boundary": [
+          {"x": 0, "y": 0},
+          {"x": 14, "y": 0},
+          {"x": 14, "y": 5},
+          {"x": 0, "y": 5}
+        ],
+        "StartPoint": {
+          "position": {"x": 12, "y": 2.5},
+          "angle": 0
+        },
+        "TargetArea": {
+          "position": {"x": 2, "y": 2},
+          "size": {"x": 2, "y": 2}
+        },
+        "has_vehicle": true,
+        "vehicle": {
+          "relative_position": {"x": 12, "y": 2.5},
+          "angle": 0
+        }
+      },
+      {
+        "Name": "ToCarbin",
+        "order": 4,
+        "category": "free_walk",
+        "boundary": [
+          {"x": 0, "y": 0},
+          {"x": 14, "y": 0},
+          {"x": 14, "y": 5},
+          {"x": 0, "y": 5}
+        ],
+        "StartPoint": {
+          "position": {"x": 2, "y": 2},
+          "angle": 0
+        },
+        "TargetArea": {
+          "position": {"x": 12, "y": 2.5},
+          "size": {"x": 2, "y": 2}
+        },
+        "has_vehicle": true,
+        "vehicle": {
+          "relative_position": {"x": 12, "y": 2.5},
+          "angle": 0
+        }
+      }
+    ]
+  }

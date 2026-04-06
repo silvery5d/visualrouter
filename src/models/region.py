@@ -65,6 +65,8 @@ VEHICLE_SIZE = Size(x=2.5, y=4.5)
 @dataclass
 class Region:
     name: str
+    order: int = 0
+    category: str = "normal"  # "normal" or "free_walk"
     boundary: list[Point] = field(default_factory=list)
     start_point: StartPoint = field(default_factory=lambda: StartPoint(Point(0, 0)))
     target_area: TargetArea = field(default_factory=lambda: TargetArea(Point(0, 0), Size(1, 1)))
@@ -81,6 +83,8 @@ class Region:
     def to_dict(self) -> dict:
         d = {
             "Name": self.name,
+            "order": self.order,
+            "category": self.category,
             "boundary": [p.to_dict() for p in self.boundary],
             "StartPoint": self.start_point.to_dict(),
             "TargetArea": self.target_area.to_dict(),
@@ -98,6 +102,8 @@ class Region:
             vehicle = Vehicle.from_dict(data["vehicle"])
         return cls(
             name=data["Name"],
+            order=data.get("order", 0),
+            category=data.get("category", "normal"),
             boundary=[Point.from_dict(p) for p in data.get("boundary", [])],
             start_point=StartPoint.from_dict(data["StartPoint"]),
             target_area=TargetArea.from_dict(data["TargetArea"]),

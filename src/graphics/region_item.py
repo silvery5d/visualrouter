@@ -2,9 +2,10 @@ from __future__ import annotations
 import math
 from PySide6.QtWidgets import (
     QGraphicsItemGroup, QGraphicsPolygonItem, QGraphicsEllipseItem,
-    QGraphicsRectItem, QGraphicsItem, QGraphicsTextItem, QMenu,
+    QGraphicsRectItem, QGraphicsItem, QGraphicsSimpleTextItem, QMenu,
+    QGraphicsPathItem,
 )
-from PySide6.QtGui import QPen, QBrush, QColor, QPolygonF, QFont
+from PySide6.QtGui import QPen, QBrush, QColor, QPolygonF, QFont, QTransform, QPainterPath
 from PySide6.QtCore import QPointF, Qt
 
 from src.models.region import Region, VEHICLE_SIZE
@@ -46,7 +47,11 @@ class RegionItem(QGraphicsItemGroup):
         # Boundary polygon
         pts = [QPointF(p.x, p.y) for p in region.boundary]
         self._boundary_item = QGraphicsPolygonItem(QPolygonF(pts))
-        self._boundary_item.setPen(QPen(self._color.darker(150), 0.05))
+        if region.category == "free_walk":
+            pen = QPen(self._color.darker(150), 0.06, Qt.PenStyle.DashLine)
+            self._boundary_item.setPen(pen)
+        else:
+            self._boundary_item.setPen(QPen(self._color.darker(150), 0.05))
         self._boundary_item.setBrush(QBrush(self._color))
         self.addToGroup(self._boundary_item)
 
@@ -58,16 +63,16 @@ class RegionItem(QGraphicsItemGroup):
         self._start_marker.setPen(QPen(Qt.PenStyle.NoPen))
         self.addToGroup(self._start_marker)
 
-        # TargetArea marker (orange rect)
+        # TargetArea marker (orange rect, centered on position)
         ta = region.target_area
         self._target_rect = QGraphicsRectItem(
-            ta.position.x, ta.position.y, ta.size.x, ta.size.y
+            ta.position.x - ta.size.x / 2, ta.position.y - ta.size.y / 2, ta.size.x, ta.size.y
         )
         self._target_rect.setBrush(QBrush(QColor(255, 165, 0, 120)))
         self._target_rect.setPen(QPen(QColor(255, 140, 0), 0.03))
         self.addToGroup(self._target_rect)
 
-        # Vehicle marker (blue rect)
+        # Vehicle marker (blue rect + direction arrow)
         if region.has_vehicle and region.vehicle:
             vp = region.vehicle.relative_position
             vw, vh = VEHICLE_SIZE.x, VEHICLE_SIZE.y
@@ -78,15 +83,57 @@ class RegionItem(QGraphicsItemGroup):
             self._vehicle_rect.setPen(QPen(QColor(30, 60, 200), 0.03))
             self.addToGroup(self._vehicle_rect)
 
-        # Name label
-        label = QGraphicsTextItem(region.name)
-        label.setDefaultTextColor(self._color.darker(200))
+            # Direction arrow (0° = up/+Y, clockwise)
+            arrow_len = min(vw, vh) * 0.4
+            angle_rad = math.radians(region.vehicle.angle)
+            # 0° = +Y, 90° = +X (clockwise from up)
+            dx = arrow_len * math.sin(angle_rad)
+            dy = arrow_len * math.cos(angle_rad)
+            ax, ay = vp.x, vp.y  # arrow center
+
+            arrow_path = QPainterPath()
+            arrow_path.moveTo(ax, ay)
+            arrow_path.lineTo(ax + dx, ay + dy)
+            # Arrowhead
+            head_size = arrow_len * 0.35
+            left_angle = angle_rad + math.radians(150)
+            right_angle = angle_rad - math.radians(150)
+            tip_x, tip_y = ax + dx, ay + dy
+            arrow_path.moveTo(tip_x, tip_y)
+            arrow_path.lineTo(
+                tip_x + head_size * math.sin(left_angle),
+                tip_y + head_size * math.cos(left_angle),
+            )
+            arrow_path.moveTo(tip_x, tip_y)
+            arrow_path.lineTo(
+                tip_x + head_size * math.sin(right_angle),
+                tip_y + head_size * math.cos(right_angle),
+            )
+            arrow_item = QGraphicsPathItem(arrow_path)
+            arrow_item.setPen(QPen(QColor(30, 60, 200), 0.06))
+            self.addToGroup(arrow_item)
+
+        # Name label with order number (flipped back since view Y is inverted)
+        label_text = f"{region.order}. {region.name}" if region.order > 0 else region.name
+        label = QGraphicsSimpleTextItem(label_text)
+        label.setBrush(QBrush(self._color.darker(200)))
         font = QFont()
-        font.setPointSizeF(0.3)
+        font.setPointSize(12)
         label.setFont(font)
+        label.setTransform(QTransform.fromScale(0.02, -0.02))  # scale to scene units + flip upright
         cx, cy = region.centroid()
-        label.setPos(cx - 0.5, cy - 0.2)
+        label.setPos(cx - 0.5, cy + 0.2)
         self.addToGroup(label)
+
+    def rebuild(self):
+        """Remove and recreate all child items to reflect model changes."""
+        for child in self.childItems():
+            self.removeFromGroup(child)
+            if child.scene():
+                child.scene().removeItem(child)
+        self._build_children()
+        cx, cy = self.region.centroid()
+        self.setTransformOriginPoint(QPointF(cx, cy))
 
     def itemChange(self, change, value):
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange and self.scene():
@@ -162,6 +209,7 @@ class RegionItem(QGraphicsItemGroup):
         props_action = menu.addAction("属性")
         action = menu.exec(event.screenPos())
         if action == delete_action:
+            self.scene().region_deleted.emit(self)
             self.scene().removeItem(self)
         elif action == props_action:
             self.setSelected(True)

@@ -17,6 +17,7 @@ from src.models.region import Region
 from src.models.venue import Wall, Obstacle, Point
 from src.export.exporter import export_to_file
 from src.widgets.toolbar import ToolMode
+from src.graphics.region_editor import RegionEditor
 
 
 class MoveRegionCommand(QUndoCommand):
@@ -50,7 +51,7 @@ class RotateRegionCommand(QUndoCommand):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("VisualRouter - VR场馆路线规划")
+        self.setWindowTitle("水浒侠影纵横VR大空间项目场景设计")
         self.setMinimumSize(1200, 800)
 
         self._project = Project()
@@ -59,6 +60,7 @@ class MainWindow(QMainWindow):
         self._undo_stack = QUndoStack(self)
 
         self.scene = VenueGraphicsScene()
+        self.scene._main_window = self
         self.view = VenueGraphicsView(self.scene)
 
         self.side_panel = SidePanel()
@@ -80,7 +82,15 @@ class MainWindow(QMainWindow):
         self.view.mouse_moved.connect(self._update_mouse_pos)
 
         self.scene.region_moved.connect(self._on_region_moved)
+        self.scene.region_deleted.connect(self._on_region_deleted)
         self.side_panel.region_selected.connect(self._on_side_panel_region_selected)
+        self.side_panel.edit_region_requested.connect(self._enter_edit_mode)
+        self.side_panel.finish_edit_requested.connect(self._exit_edit_mode)
+
+        self._edit_mode = False
+        self._region_editor: RegionEditor | None = None
+        self._hidden_items: list = []  # items hidden during edit mode
+        self._editing_region_item: RegionItem | None = None
 
         self._create_menus()
 
@@ -121,6 +131,11 @@ class MainWindow(QMainWindow):
             if item.region.name == name and item.isSelected():
                 self.side_panel.update_properties(item)
 
+    def _on_region_deleted(self, item):
+        if item in self._region_items:
+            self._region_items.remove(item)
+        self.side_panel.set_region_items(self._region_items)
+
     def _on_side_panel_region_selected(self, name: str):
         for item in self._region_items:
             item.setSelected(item.region.name == name)
@@ -136,12 +151,84 @@ class MainWindow(QMainWindow):
             self.toolbar.set_mode(ToolMode.WALL)
         elif key == Qt.Key.Key_O and not event.modifiers():
             self.toolbar.set_mode(ToolMode.OBSTACLE)
+        elif key == Qt.Key.Key_E and not event.modifiers():
+            self.toolbar.set_mode(ToolMode.ERASER)
         elif key == Qt.Key.Key_G and not event.modifiers():
             self.toolbar.toggle_snap()
+        elif key == Qt.Key.Key_Delete or key == Qt.Key.Key_Backspace:
+            self._delete_selected()
         elif key == Qt.Key.Key_Escape:
             self.scene._cancel_drawing()
         else:
             super().keyPressEvent(event)
+
+    # --- Region edit mode ---
+
+    def _enter_edit_mode(self, name: str):
+        if self._edit_mode:
+            return
+        region_item = None
+        for item in self._region_items:
+            if item.region.name == name:
+                region_item = item
+                break
+        if not region_item:
+            return
+
+        self._edit_mode = True
+        self._editing_region_item = region_item
+        self.toolbar.setEnabled(False)
+
+        # Hide all scene items except grid
+        self._hidden_items = []
+        for item in self.scene.items():
+            if item.isVisible():
+                self._hidden_items.append(item)
+                item.setVisible(False)
+
+        # Create editor with region in local coordinates (no canvas offset)
+        self._region_editor = RegionEditor(
+            region_item.region, self.scene,
+            on_changed=self._on_edit_region_changed,
+        )
+        self._region_editor.setup()
+
+        # Switch side panel to edit mode
+        self.side_panel.enter_edit_mode(region_item)
+
+        # Override left click to add vertices on edges
+        self.scene._edit_mode = True
+
+    def _exit_edit_mode(self):
+        if not self._edit_mode:
+            return
+
+        # Cleanup editor
+        if self._region_editor:
+            self._region_editor.cleanup()
+            self._region_editor = None
+
+        # Restore hidden items
+        for item in self._hidden_items:
+            item.setVisible(True)
+        self._hidden_items.clear()
+
+        # Rebuild the region item visuals with updated data
+        if self._editing_region_item:
+            self._editing_region_item.rebuild()
+        self._editing_region_item = None
+
+        self._edit_mode = False
+        self.scene._edit_mode = False
+        self.toolbar.setEnabled(True)
+
+        # Switch side panel back and refresh list
+        self.side_panel.exit_edit_mode()
+        self.side_panel.set_region_items(self._region_items)
+
+    def _on_edit_region_changed(self):
+        """Called when region editor changes markers/vertices."""
+        self.side_panel.update_edit_fields_from_region()
 
     # --- File operations ---
 
@@ -151,7 +238,7 @@ class MainWindow(QMainWindow):
         self._region_items = []
         self._current_path = None
         self.side_panel.set_region_items([])
-        self.setWindowTitle("VisualRouter - 新建项目")
+        self.setWindowTitle("水浒侠影纵横VR大空间项目场景设计 - 新建项目")
 
     def _open_project(self):
         path, _ = QFileDialog.getOpenFileName(self, "打开项目", "", "VR Project (*.vrproject)")
@@ -159,7 +246,7 @@ class MainWindow(QMainWindow):
             self._project = Project.load(path)
             self._current_path = path
             self._load_project_to_scene()
-            self.setWindowTitle(f"VisualRouter - {os.path.basename(path)}")
+            self.setWindowTitle(f"水浒侠影纵横VR大空间项目场景设计 - {os.path.basename(path)}")
 
     def _save_project(self):
         if self._current_path:
@@ -174,7 +261,7 @@ class MainWindow(QMainWindow):
             self._current_path = path
             self._collect_state_to_project()
             self._project.save(path)
-            self.setWindowTitle(f"VisualRouter - {os.path.basename(path)}")
+            self.setWindowTitle(f"水浒侠影纵横VR大空间项目场景设计 - {os.path.basename(path)}")
 
     def _import_vr_config(self):
         path, _ = QFileDialog.getOpenFileName(self, "导入VR配置", "", "JSON (*.json)")
@@ -270,8 +357,11 @@ class MainWindow(QMainWindow):
                 for item in self._region_items:
                     pl = placement_map.get(item.region.name)
                     if pl:
+                        # Disable geometry notifications during loading to avoid segfault
+                        item.setFlag(RegionItem.GraphicsItemFlag.ItemSendsGeometryChanges, False)
                         item.setPos(pl.canvas_x, pl.canvas_y)
                         item.setRotation(pl.rotation)
+                        item.setFlag(RegionItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
                 self.side_panel.set_region_items(self._region_items)
 
     # --- Edit operations ---
@@ -287,6 +377,7 @@ class MainWindow(QMainWindow):
             self.scene.removeItem(item)
             if item in self._region_items:
                 self._region_items.remove(item)
+        self.side_panel.set_region_items(self._region_items)
 
     def _show_shortcuts(self):
         QMessageBox.information(self, "快捷键", (

@@ -9,6 +9,7 @@ class ToolMode(Enum):
     SELECT = auto()
     WALL = auto()
     OBSTACLE = auto()
+    ERASER = auto()
 
 
 class EditorToolBar(QToolBar):
@@ -24,6 +25,7 @@ class EditorToolBar(QToolBar):
             (ToolMode.SELECT, "选择 (S)"),
             (ToolMode.WALL, "画墙壁 (W)"),
             (ToolMode.OBSTACLE, "画障碍物 (O)"),
+            (ToolMode.ERASER, "擦除 (E)"),
         ]:
             action = QAction(label, self)
             action.setCheckable(True)
